@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   collectRuntimeDependencyInstallManifest,
   collectRuntimeDependencyInstallSpecs,
@@ -26,6 +26,91 @@ describe("stageBundledPluginRuntimeDeps", () => {
     );
     return { pluginDir, repoRoot };
   }
+
+  it.runIf(process.platform === "win32")(
+    "falls back to copy-on-replace when Windows blocks runtime deps rename",
+    () => {
+      const { pluginDir, repoRoot } = createBundledPluginFixture({
+        pluginId: "feishu",
+        packageJson: {
+          name: "@openclaw/feishu",
+          version: "1.0.0",
+          dependencies: {
+            "@larksuiteoapi/node-sdk": "^1.60.0",
+          },
+          openclaw: {
+            bundle: {
+              stageRuntimeDependencies: true,
+            },
+          },
+        },
+      });
+      const rootDepDir = path.join(repoRoot, "node_modules", "@larksuiteoapi", "node-sdk");
+      fs.mkdirSync(path.join(rootDepDir, "lib"), { recursive: true });
+      fs.mkdirSync(path.join(rootDepDir, "es"), { recursive: true });
+      fs.writeFileSync(
+        path.join(rootDepDir, "package.json"),
+        `${JSON.stringify(
+          {
+            name: "@larksuiteoapi/node-sdk",
+            version: "1.60.0",
+            main: "./lib/index.js",
+            module: "./es/index.js",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      fs.writeFileSync(path.join(rootDepDir, "lib", "index.js"), "export const runtime = true;\n");
+      fs.writeFileSync(path.join(rootDepDir, "es", "index.js"), "export const moduleRuntime = true;\n");
+      fs.mkdirSync(path.join(pluginDir, "node_modules", "stale-package"), { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, "node_modules", "stale-package", "index.js"),
+        "module.exports = 'stale';\n",
+        "utf8",
+      );
+
+      const originalRenameSync = fs.renameSync.bind(fs);
+      let injectedRenameFailure = false;
+      const renameSync = vi.spyOn(fs, "renameSync").mockImplementation((sourcePath, targetPath) => {
+        if (
+          !injectedRenameFailure &&
+          typeof sourcePath === "string" &&
+          typeof targetPath === "string" &&
+          sourcePath.includes(".openclaw-runtime-deps-stage-") &&
+          targetPath.endsWith(
+            `${path.sep}dist${path.sep}extensions${path.sep}feishu${path.sep}node_modules`,
+          )
+        ) {
+          injectedRenameFailure = true;
+          const error = new Error("EPERM") as NodeJS.ErrnoException;
+          error.code = "EPERM";
+          throw error;
+        }
+        return originalRenameSync(sourcePath, targetPath);
+      });
+
+      try {
+        stageBundledPluginRuntimeDeps({ repoRoot });
+      } finally {
+        renameSync.mockRestore();
+      }
+
+      expect(injectedRenameFailure).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(pluginDir, "node_modules", "@larksuiteoapi", "node-sdk", "lib", "index.js"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(pluginDir, "node_modules", "@larksuiteoapi", "node-sdk", "es", "index.js"),
+        ),
+      ).toBe(true);
+      expect(fs.existsSync(path.join(pluginDir, "node_modules", "stale-package"))).toBe(false);
+    },
+  );
 
   it("pins fallback install specs to exact installed versions", () => {
     const { repoRoot } = createBundledPluginFixture({

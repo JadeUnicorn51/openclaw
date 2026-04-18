@@ -1,5 +1,6 @@
 packages:
   - .
+  - electron
   - ui
   - packages/*
   - extensions/*
@@ -37,6 +38,7 @@ onlyBuiltDependencies:
   - "@tloncorp/api"
   - "@whiskeysockets/baileys"
   - authenticate-pam
+  - electron
   - esbuild
   - node-llama-cpp
   - protobufjs

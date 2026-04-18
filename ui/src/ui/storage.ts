@@ -60,6 +60,16 @@ export type UiSettings = {
   locale?: string;
 };
 
+declare global {
+  interface Window {
+    openclawDesktop?: {
+      isDesktop: boolean;
+      platform: string;
+      gatewayToken?: string | null;
+    };
+  }
+}
+
 function isViteDevPage(): boolean {
   if (typeof document === "undefined") {
     return false;
@@ -113,6 +123,19 @@ function normalizeGatewayTokenScope(gatewayUrl: string): string {
 
 function tokenSessionKeyForGateway(gatewayUrl: string): string {
   return `${TOKEN_SESSION_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
+}
+
+function resolveDesktopGatewayToken(gatewayUrl: string, desktopGatewayUrl: string): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const injected = normalizeOptionalString(window.openclawDesktop?.gatewayToken);
+  if (!injected) {
+    return "";
+  }
+  return normalizeGatewayTokenScope(gatewayUrl) === normalizeGatewayTokenScope(desktopGatewayUrl)
+    ? injected
+    : "";
 }
 
 function resolveScopedSessionSelection(
@@ -179,10 +202,11 @@ function persistSessionToken(gatewayUrl: string, token: string) {
 export function loadSettings(): UiSettings {
   const { pageUrl: pageDerivedUrl, effectiveUrl: defaultUrl } = deriveDefaultGatewayUrl();
   const storage = getSafeLocalStorage();
+  const desktopDefaultToken = resolveDesktopGatewayToken(defaultUrl, defaultUrl);
 
   const defaults: UiSettings = {
     gatewayUrl: defaultUrl,
-    token: loadSessionToken(defaultUrl),
+    token: desktopDefaultToken || loadSessionToken(defaultUrl),
     sessionKey: "main",
     lastActiveSessionKey: "main",
     theme: "claw",
@@ -218,7 +242,7 @@ export function loadSettings(): UiSettings {
     const settings = {
       gatewayUrl,
       // Gateway auth is intentionally in-memory only; scrub any legacy persisted token on load.
-      token: loadSessionToken(gatewayUrl),
+      token: resolveDesktopGatewayToken(gatewayUrl, defaultUrl) || loadSessionToken(gatewayUrl),
       sessionKey: scopedSessionSelection.sessionKey,
       lastActiveSessionKey: scopedSessionSelection.lastActiveSessionKey,
       theme,

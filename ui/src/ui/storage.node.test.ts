@@ -32,6 +32,24 @@ function setControlUiBasePath(value: string | undefined) {
   });
 }
 
+function setDesktopGatewayToken(value: string | undefined) {
+  const currentWindow =
+    typeof window === "undefined" ? ({} as Window & typeof globalThis) : window;
+  if (value == null) {
+    delete currentWindow.openclawDesktop;
+    return;
+  }
+  Object.defineProperty(currentWindow, "openclawDesktop", {
+    value: {
+      isDesktop: true,
+      platform: "win32",
+      gatewayToken: value,
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
 function expectedGatewayUrl(basePath: string): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${location.host}${basePath}`;
@@ -45,11 +63,13 @@ describe("loadSettings default gateway URL derivation", () => {
     localStorage.clear();
     sessionStorage.clear();
     setControlUiBasePath(undefined);
+    setDesktopGatewayToken(undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     setControlUiBasePath(undefined);
+    setDesktopGatewayToken(undefined);
     vi.unstubAllGlobals();
   });
 
@@ -169,6 +189,46 @@ describe("loadSettings default gateway URL derivation", () => {
     expect(loadSettings()).toMatchObject({
       gatewayUrl: gwUrl,
       token: "session-token",
+    });
+  });
+
+  it("prefers the injected desktop gateway token for the current gateway", async () => {
+    setTestLocation({
+      protocol: "https:",
+      host: "gateway.example:8443",
+      pathname: "/",
+    });
+    setDesktopGatewayToken("desktop-token");
+
+    const gwUrl = expectedGatewayUrl("");
+    sessionStorage.setItem(`openclaw.control.token.v1:${gwUrl}`, "session-token");
+
+    expect(loadSettings()).toMatchObject({
+      gatewayUrl: gwUrl,
+      token: "desktop-token",
+    });
+  });
+
+  it("does not reuse the injected desktop gateway token for a different gateway", async () => {
+    setTestLocation({
+      protocol: "https:",
+      host: "gateway.example:8443",
+      pathname: "/",
+    });
+    setDesktopGatewayToken("desktop-token");
+
+    localStorage.setItem(
+      "openclaw.control.settings.v1",
+      JSON.stringify({
+        gatewayUrl: "wss://other-gateway.example:8443",
+        sessionKey: "main",
+        lastActiveSessionKey: "main",
+      }),
+    );
+
+    expect(loadSettings()).toMatchObject({
+      gatewayUrl: "wss://other-gateway.example:8443",
+      token: "",
     });
   });
 

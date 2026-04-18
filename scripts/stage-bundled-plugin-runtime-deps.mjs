@@ -25,6 +25,13 @@ function removePathIfExists(targetPath) {
   fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
+function shouldFallbackToCopy(error) {
+  return (
+    process.platform === "win32" &&
+    (error?.code === "EPERM" || error?.code === "EINVAL" || error?.code === "UNKNOWN")
+  );
+}
+
 function makeTempDir(parentDir, prefix) {
   return fs.mkdtempSync(path.join(parentDir, prefix));
 }
@@ -70,6 +77,21 @@ function replaceDirAtomically(targetPath, sourcePath) {
     fs.renameSync(sourcePath, targetPath);
     removePathIfExists(backupPath);
   } catch (error) {
+    if (shouldFallbackToCopy(error)) {
+      try {
+        removePathIfExists(targetPath);
+        fs.cpSync(sourcePath, targetPath, { recursive: true, dereference: true });
+        removePathIfExists(sourcePath);
+        removePathIfExists(backupPath);
+        return;
+      } catch (fallbackError) {
+        removePathIfExists(targetPath);
+        if (movedExistingTarget && fs.existsSync(backupPath)) {
+          fs.renameSync(backupPath, targetPath);
+        }
+        throw fallbackError;
+      }
+    }
     if (movedExistingTarget && !fs.existsSync(targetPath) && fs.existsSync(backupPath)) {
       fs.renameSync(backupPath, targetPath);
     }

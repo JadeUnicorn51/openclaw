@@ -28,6 +28,6 @@
       "@openclaw/*": ["./extensions/*"]
     }
   },
-  "include": ["src/**/*", "ui/**/*", "extensions/**/*", "packages/**/*"],
+  "include": ["src/**/*", "ui/**/*", "electron/**/*", "extensions/**/*", "packages/**/*"],
   "exclude": ["node_modules", "dist", "**/dist/**"]
 }
