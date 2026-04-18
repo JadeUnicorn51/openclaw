@@ -64,6 +64,7 @@ export type OverviewProps = {
 };
 
 export function renderOverview(props: OverviewProps) {
+  const desktopSetup = resolveDesktopSetupState();
   const snapshot = props.hello?.snapshot as
     | {
         uptimeMs?: number;
@@ -412,6 +413,40 @@ export function renderOverview(props: OverviewProps) {
 
     <div class="ov-section-divider"></div>
 
+    ${desktopSetup
+      ? html`
+          <section class="card" data-testid="desktop-setup-card">
+            <div class="card-title">Finish Desktop Setup</div>
+            <div class="card-sub">
+              The desktop app already created a local gateway and workspace. Configure models,
+              channels, and advanced settings before using procurement workflows.
+            </div>
+            <div class="callout" style="margin-top: 16px;">
+              <div><strong>Config</strong>: <span class="mono">${desktopSetup.configPath}</span></div>
+              <div style="margin-top: 8px;">
+                <strong>Workspace</strong>: <span class="mono">${desktopSetup.workspaceDir}</span>
+              </div>
+              <div style="margin-top: 8px;">
+                <strong>State</strong>: <span class="mono">${desktopSetup.stateDir}</span>
+              </div>
+            </div>
+            <div class="row" style="margin-top: 14px; flex-wrap: wrap;">
+              <button class="btn" @click=${() => props.onNavigate("aiAgents")}>Configure Models</button>
+              <button class="btn" @click=${() => props.onNavigate("communications")}>
+                Configure Channels
+              </button>
+              <button class="btn" @click=${() => props.onNavigate("infrastructure")}>
+                Advanced Settings
+              </button>
+              <button class="btn btn-primary" @click=${() => props.onNavigate("chat")}>
+                Open Chat
+              </button>
+            </div>
+          </section>
+          <div class="ov-section-divider"></div>
+        `
+      : nothing}
+
     ${renderOverviewCards({
       usageResult: props.usageResult,
       sessionsResult: props.sessionsResult,
@@ -436,4 +471,28 @@ export function renderOverview(props: OverviewProps) {
       })}
     </div>
   `;
+}
+
+type DesktopSetupState = {
+  configPath: string;
+  stateDir: string;
+  workspaceDir: string;
+};
+
+function resolveDesktopSetupState(): DesktopSetupState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const desktop = window.openclawDesktop;
+  if (!desktop?.isDesktop || desktop.needsSetup !== true) {
+    return null;
+  }
+  if (!desktop.configPath || !desktop.stateDir || !desktop.workspaceDir) {
+    return null;
+  }
+  return {
+    configPath: desktop.configPath,
+    stateDir: desktop.stateDir,
+    workspaceDir: desktop.workspaceDir,
+  };
 }

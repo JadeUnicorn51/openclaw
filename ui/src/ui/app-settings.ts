@@ -91,6 +91,7 @@ type SettingsHost = {
   dreamDiaryError: string | null;
   dreamDiaryPath: string | null;
   dreamDiaryContent: string | null;
+  onboarding?: boolean;
 };
 
 type SettingsAppHost = SettingsHost &
@@ -461,7 +462,10 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   if (typeof window === "undefined") {
     return;
   }
-  const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "chat";
+  const resolved = resolveTabForLocation(host, window.location.pathname);
+  if (!resolved) {
+    return;
+  }
   setTabFromRoute(host, resolved);
   syncUrlWithTab(host, resolved, replace);
 }
@@ -470,7 +474,7 @@ export function onPopState(host: SettingsHost) {
   if (typeof window === "undefined") {
     return;
   }
-  const resolved = tabFromPath(window.location.pathname, host.basePath);
+  const resolved = resolveTabForLocation(host, window.location.pathname, { fallback: null });
   if (!resolved) {
     return;
   }
@@ -482,6 +486,25 @@ export function onPopState(host: SettingsHost) {
   }
 
   setTabFromRoute(host, resolved);
+}
+
+function resolveTabForLocation(
+  host: SettingsHost,
+  pathname: string,
+  options: { fallback?: Tab | null } = {},
+): Tab | null {
+  const fallback = options.fallback === undefined ? "chat" : options.fallback;
+  const resolved = tabFromPath(pathname, host.basePath) ?? fallback;
+  if (!resolved) {
+    return null;
+  }
+  if (resolved !== "chat" || !host.onboarding) {
+    return resolved;
+  }
+  const normalizedPath = normalizePath(pathname);
+  const normalizedBase = normalizeBasePath(host.basePath);
+  const isBaseRoot = normalizedPath === (normalizedBase || "/");
+  return isBaseRoot ? "overview" : resolved;
 }
 
 export function setTabFromRoute(host: SettingsHost, next: Tab) {

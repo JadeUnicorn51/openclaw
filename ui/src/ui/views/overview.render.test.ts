@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 
 import { render } from "lit";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { i18n } from "../../i18n/index.ts";
 import { getSafeLocalStorage } from "../../local-storage.ts";
 import { renderOverview, type OverviewProps } from "./overview.ts";
@@ -60,7 +60,23 @@ function createOverviewProps(overrides: Partial<OverviewProps> = {}): OverviewPr
   };
 }
 
+function setDesktopSetupState(value: Window["openclawDesktop"] | undefined) {
+  if (value == null) {
+    delete window.openclawDesktop;
+    return;
+  }
+  Object.defineProperty(window, "openclawDesktop", {
+    value,
+    writable: true,
+    configurable: true,
+  });
+}
+
 describe("overview view rendering", () => {
+  afterEach(() => {
+    setDesktopSetupState(undefined);
+  });
+
   it("keeps the persisted overview locale selected before i18n hydration finishes", async () => {
     const container = document.createElement("div");
     const props = createOverviewProps({
@@ -90,5 +106,27 @@ describe("overview view rendering", () => {
     expect(select?.selectedOptions[0]?.textContent?.trim()).toBe("简体中文 (简体中文)");
 
     await i18n.setLocale("en");
+  });
+
+  it("renders the desktop setup card when the embedded desktop app still needs setup", async () => {
+    const container = document.createElement("div");
+    setDesktopSetupState({
+      isDesktop: true,
+      platform: "win32",
+      gatewayToken: "desktop-token",
+      configPath: "C:/PurchaseAI/openclaw.json",
+      stateDir: "C:/PurchaseAI",
+      workspaceDir: "C:/PurchaseAI/workspace",
+      needsSetup: true,
+    });
+
+    render(renderOverview(createOverviewProps()), container);
+    await Promise.resolve();
+
+    expect(container.querySelector('[data-testid="desktop-setup-card"]')?.textContent).toContain(
+      "Finish Desktop Setup",
+    );
+    expect(container.textContent).toContain("C:/PurchaseAI/workspace");
+    expect(container.textContent).toContain("Configure Models");
   });
 });

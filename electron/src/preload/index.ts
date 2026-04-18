@@ -4,6 +4,30 @@ import path from "node:path";
 const electron = require("electron") as typeof import("electron");
 const { contextBridge } = electron;
 
+type DesktopConfig = {
+  agents?: {
+    defaults?: {
+      workspace?: unknown;
+    };
+  };
+  gateway?: {
+    mode?: unknown;
+    auth?: {
+      mode?: unknown;
+      token?: unknown;
+    };
+  };
+  [key: string]: unknown;
+};
+
+type DesktopBootstrapContext = {
+  configPath: string;
+  stateDir: string;
+  workspaceDir: string;
+  gatewayToken: string | null;
+  needsSetup: boolean;
+};
+
 function resolveConfigPath(): string {
   const explicit = process.env.OPENCLAW_CONFIG_PATH?.trim();
   if (explicit) {
@@ -12,25 +36,103 @@ function resolveConfigPath(): string {
   return path.join(os.homedir(), ".openclaw", "openclaw.json");
 }
 
-function resolveGatewayTokenFromConfig(): string | null {
+function readDesktopConfig(configPath: string): DesktopConfig {
+  try {
+    const raw = fs.readFileSync(configPath, "utf8");
+    return JSON.parse(raw) as DesktopConfig;
+  } catch {
+    return {};
+  }
+}
+
+function pruneEmptyObjects(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => pruneEmptyObjects(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const entries = Object.entries(value)
+    .map(([key, entry]) => [key, pruneEmptyObjects(entry)] as const)
+    .filter(([, entry]) => {
+      if (entry == null) {
+        return false;
+      }
+      if (typeof entry !== "object" || Array.isArray(entry)) {
+        return true;
+      }
+      return Object.keys(entry).length > 0;
+    });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function stripDesktopBootstrapKeys(parsed: DesktopConfig): Record<string, unknown> {
+  const next: DesktopConfig = {
+    ...parsed,
+    agents: parsed.agents
+      ? {
+          ...parsed.agents,
+          defaults: parsed.agents.defaults
+            ? {
+                ...parsed.agents.defaults,
+              }
+            : undefined,
+        }
+      : undefined,
+    gateway: parsed.gateway
+      ? {
+          ...parsed.gateway,
+          auth: parsed.gateway.auth
+            ? {
+                ...parsed.gateway.auth,
+              }
+            : undefined,
+        }
+      : undefined,
+  };
+
+  if (next.agents?.defaults && "workspace" in next.agents.defaults) {
+    delete next.agents.defaults.workspace;
+  }
+  if (next.gateway && "mode" in next.gateway) {
+    delete next.gateway.mode;
+  }
+  if (next.gateway?.auth) {
+    delete next.gateway.auth.mode;
+    delete next.gateway.auth.token;
+  }
+
+  return (pruneEmptyObjects(next) as Record<string, unknown> | undefined) ?? {};
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveDesktopBootstrapContext(): DesktopBootstrapContext {
+  const configPath = resolveConfigPath();
+  const parsed = readDesktopConfig(configPath);
+  const stateDir = process.env.OPENCLAW_STATE_DIR?.trim() || path.dirname(configPath);
+  const workspaceDir =
+    normalizeString(parsed.agents?.defaults?.workspace) || path.join(stateDir, "workspace");
   const envToken = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
   if (envToken) {
-    return envToken;
-  }
-  try {
-    const raw = fs.readFileSync(resolveConfigPath(), "utf8");
-    const parsed = JSON.parse(raw) as {
-      gateway?: {
-        auth?: {
-          token?: unknown;
-        };
-      };
+    return {
+      configPath,
+      stateDir,
+      workspaceDir,
+      gatewayToken: envToken,
+      needsSetup: Object.keys(stripDesktopBootstrapKeys(parsed)).length === 0,
     };
-    const token = parsed.gateway?.auth?.token;
-    return typeof token === "string" && token.trim() ? token.trim() : null;
-  } catch {
-    return null;
   }
+
+  return {
+    configPath,
+    stateDir,
+    workspaceDir,
+    gatewayToken: normalizeString(parsed.gateway?.auth?.token),
+    needsSetup: Object.keys(stripDesktopBootstrapKeys(parsed)).length === 0,
+  };
 }
 
 function resolveGatewayTokenScopes(): string[] {
@@ -64,13 +166,17 @@ function seedGatewayTokenSessionStorage(token: string | null): void {
   }
 }
 
-const gatewayToken = resolveGatewayTokenFromConfig();
-seedGatewayTokenSessionStorage(gatewayToken);
+const desktopBootstrap = resolveDesktopBootstrapContext();
+seedGatewayTokenSessionStorage(desktopBootstrap.gatewayToken);
 
 contextBridge.exposeInMainWorld("openclawDesktop", {
   isDesktop: true,
   platform: process.platform,
-  gatewayToken,
+  gatewayToken: desktopBootstrap.gatewayToken,
+  configPath: desktopBootstrap.configPath,
+  stateDir: desktopBootstrap.stateDir,
+  workspaceDir: desktopBootstrap.workspaceDir,
+  needsSetup: desktopBootstrap.needsSetup,
 });
 
 declare global {
@@ -79,6 +185,10 @@ declare global {
       isDesktop: boolean;
       platform: string;
       gatewayToken?: string | null;
+      configPath?: string;
+      stateDir?: string;
+      workspaceDir?: string;
+      needsSetup?: boolean;
     };
   }
 }

@@ -117,13 +117,14 @@ declare global {
 const bootAssistantIdentity = normalizeAssistantIdentity({});
 
 function resolveOnboardingMode(): boolean {
+  const desktopNeedsSetup = window.openclawDesktop?.needsSetup === true;
   if (!window.location.search) {
-    return false;
+    return desktopNeedsSetup;
   }
   const params = new URLSearchParams(window.location.search);
   const raw = params.get("onboarding");
   if (!raw) {
-    return false;
+    return desktopNeedsSetup;
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";

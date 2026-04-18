@@ -66,6 +66,10 @@ declare global {
       isDesktop: boolean;
       platform: string;
       gatewayToken?: string | null;
+      configPath?: string;
+      stateDir?: string;
+      workspaceDir?: string;
+      needsSetup?: boolean;
     };
   }
 }

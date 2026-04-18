@@ -5,6 +5,7 @@ import {
   applySettings,
   applySettingsFromUrl,
   setTabFromRoute,
+  syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings.ts";
 import type { ThemeMode, ThemeName } from "./theme.ts";
@@ -81,6 +82,7 @@ type SettingsHost = {
   wikiMemoryPalaceLoading: boolean;
   wikiMemoryPalaceError: string | null;
   wikiMemoryPalace: null;
+  onboarding?: boolean;
 };
 
 function setTestWindowUrl(urlString: string) {
@@ -178,6 +180,7 @@ const createHost = (tab: Tab): SettingsHost => ({
   wikiMemoryPalaceLoading: false,
   wikiMemoryPalaceError: null,
   wikiMemoryPalace: null,
+  onboarding: false,
 });
 
 describe("setTabFromRoute", () => {
@@ -282,6 +285,17 @@ describe("setTabFromRoute", () => {
     expect(host.themeResolved).toBe("dash-light");
     expect(root.dataset.theme).toBe("dash-light");
     expect(root.style.colorScheme).toBe("light");
+  });
+
+  it("routes the desktop onboarding root path to overview instead of chat", () => {
+    setTestWindowUrl("https://control.example/");
+    const host = createHost("chat");
+    host.onboarding = true;
+
+    syncTabWithLocation(host, true);
+
+    expect(host.tab).toBe("overview");
+    expect(window.location.pathname).toBe("/overview");
   });
 });
 
