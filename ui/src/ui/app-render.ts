@@ -366,8 +366,26 @@ type ConfigTabOverrides = Pick<
       | "includeVirtualSections"
       | "settingsLayout"
       | "onBackToQuick"
+      | "desktopSetup"
     >
   >;
+
+type DesktopSetupStep = {
+  id: string;
+  label: string;
+  description: string;
+  status: "done" | "active" | "todo";
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+type DesktopSetupFlow = {
+  title: string;
+  summary: string;
+  completedCount: number;
+  totalCount: number;
+  steps: DesktopSetupStep[];
+};
 
 const SCOPED_CONFIG_SECTION_KEYS = new Set<string>([
   ...COMMUNICATION_SECTION_KEYS,
@@ -570,6 +588,113 @@ function extractQuickSettingsSecurity(state: AppViewState): {
 
 function resolveQuickSettingsSessionRow(state: AppViewState) {
   return state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey);
+}
+
+function resolveDesktopSetupFlow(
+  state: AppViewState,
+  requestHostUpdate: (() => void) | undefined,
+): DesktopSetupFlow | null {
+  if (typeof window === "undefined" || window.openclawDesktop?.needsSetup !== true) {
+    return null;
+  }
+
+  const configObj = state.configForm ?? state.configSnapshot?.config ?? {};
+  const agentsDefaults = ((configObj.agents as Record<string, unknown> | undefined)?.defaults ??
+    {}) as Record<string, unknown>;
+  const activeSession = resolveQuickSettingsSessionRow(state);
+  const currentModel =
+    typeof activeSession?.model === "string"
+      ? activeSession.model
+      : typeof agentsDefaults.model === "string"
+        ? agentsDefaults.model
+        : "default";
+  const channels = extractQuickSettingsChannels(state);
+  const apiKeys = extractQuickSettingsApiKeys(state);
+  const security = extractQuickSettingsSecurity(state);
+
+  const modelsReady = apiKeys.some((entry) => entry.isSet) || currentModel !== "default";
+  const channelsReady = channels.some((entry) => entry.connected);
+  const infrastructureReady =
+    security.gatewayAuth !== "unknown" &&
+    security.gatewayAuth !== "none" &&
+    Boolean(state.configSnapshot?.path);
+
+  const activateTab = (
+    tab: "aiAgents" | "communications" | "infrastructure",
+    section: string,
+  ): (() => void) => {
+    return () => {
+      state.setTab(tab as import("./navigation.ts").Tab);
+      switch (tab) {
+        case "aiAgents":
+          state.aiAgentsActiveSection = section;
+          break;
+        case "communications":
+          state.communicationsActiveSection = section;
+          break;
+        case "infrastructure":
+          state.infrastructureActiveSection = section;
+          break;
+      }
+      requestHostUpdate?.();
+    };
+  };
+
+  const steps: DesktopSetupStep[] = [
+    {
+      id: "models",
+      label: "Configure Models",
+      description: modelsReady
+        ? "Provider credentials or default models are already configured."
+        : "Add at least one provider key or choose a default model before using procurement workflows.",
+      status: modelsReady ? "done" : "todo",
+      actionLabel: "Open AI & Agents",
+      onAction: activateTab("aiAgents", "models"),
+    },
+    {
+      id: "channels",
+      label: "Configure Channels",
+      description: channelsReady
+        ? "At least one channel is configured for notifications and coordination."
+        : "Connect a channel if you want inbound requests, alerts, or collaboration routing.",
+      status: channelsReady ? "done" : "todo",
+      actionLabel: "Open Communications",
+      onAction: activateTab("communications", "channels"),
+    },
+    {
+      id: "infrastructure",
+      label: "Review Local Gateway",
+      description: infrastructureReady
+        ? "The embedded local gateway is already secured and the desktop config file is available."
+        : "Review gateway auth, local storage, and MCP settings before wider rollout.",
+      status: infrastructureReady ? "done" : "todo",
+      actionLabel: "Open Infrastructure",
+      onAction: activateTab("infrastructure", "gateway"),
+    },
+  ];
+
+  const firstIncompleteIndex = steps.findIndex((step) => step.status !== "done");
+  if (firstIncompleteIndex >= 0) {
+    steps[firstIncompleteIndex] = {
+      ...steps[firstIncompleteIndex],
+      status: "active",
+    };
+  }
+
+  const completedCount = steps.filter((step) => step.status === "done").length;
+  const totalCount = steps.length;
+  const summary =
+    completedCount === totalCount
+      ? "Desktop base setup is complete. You can keep refining settings or go straight to chat."
+      : `${completedCount} of ${totalCount} setup areas are ready. Finish the remaining steps before using the packaged desktop build as your primary workflow.`;
+
+  return {
+    title: "Desktop Setup Checklist",
+    summary,
+    completedCount,
+    totalCount,
+    steps,
+  };
 }
 
 async function applyQuickSettingsPreset(state: AppViewState, presetId: ConfigPresetId) {
@@ -879,14 +1004,17 @@ export function renderApp(state: AppViewState) {
     | "onSubsectionChange"
     | "showModeToggle"
     | "navRootLabel"
-    | "includeSections"
-    | "excludeSections"
-    | "includeVirtualSections"
+      | "includeSections"
+      | "excludeSections"
+      | "includeVirtualSections"
+      | "desktopSetup"
   >;
+  const desktopSetup = resolveDesktopSetupFlow(state, requestHostUpdate);
   const renderConfigTab = (overrides: ConfigTabOverrides) =>
     renderConfig({
       ...commonConfigProps,
       includeVirtualSections: false,
+      desktopSetup,
       ...overrides,
     });
   const configSelection = normalizeMainConfigSelection(
@@ -1013,6 +1141,7 @@ export function renderApp(state: AppViewState) {
               state.configSettingsMode = "advanced";
               requestHostUpdate?.();
             },
+            desktopSetup,
             connected: state.connected,
             gatewayUrl: state.settings.gatewayUrl,
             assistantName: state.assistantName,

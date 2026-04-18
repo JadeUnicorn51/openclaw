@@ -75,6 +75,20 @@ export type ConfigProps = {
   /** Callback to navigate back to Quick Settings. Shown in accordion mode. */
   onBackToQuick?: () => void;
   onRequestUpdate?: () => void;
+  desktopSetup?: {
+    title: string;
+    summary: string;
+    completedCount: number;
+    totalCount: number;
+    steps: Array<{
+      id: string;
+      label: string;
+      description: string;
+      status: "done" | "active" | "todo";
+      actionLabel?: string;
+      onAction?: () => void;
+    }>;
+  } | null;
 };
 
 // SVG Icons for sidebar (Lucide-style)
@@ -503,6 +517,60 @@ function resolveSectionMeta(
     label: schema?.title ?? humanize(key),
     description: schema?.description ?? "",
   };
+}
+
+function renderDesktopSetupBanner(
+  setup: NonNullable<ConfigProps["desktopSetup"]>,
+): TemplateResult {
+  return html`
+    <section class="callout info" data-testid="desktop-setup-flow" style="margin: 12px 0 16px;">
+      <div
+        style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;"
+      >
+        <div>
+          <div style="font-weight: 600;">${setup.title}</div>
+          <div class="muted" style="margin-top: 4px;">${setup.summary}</div>
+        </div>
+        <div class="pill">
+          ${setup.completedCount}/${setup.totalCount} complete
+        </div>
+      </div>
+      <div style="display: grid; gap: 10px; margin-top: 14px;">
+        ${setup.steps.map(
+          (step, index) => html`
+            <div
+              style="border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; background: ${step.status === "active"
+                ? "rgba(255,255,255,0.04)"
+                : "transparent"};"
+            >
+              <div
+                style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;"
+              >
+                <div>
+                  <div style="font-weight: 600;">
+                    ${index + 1}. ${step.label}
+                    <span class="muted" style="margin-left: 8px; font-weight: 500;">
+                      ${step.status === "done"
+                        ? "Done"
+                        : step.status === "active"
+                          ? "Next"
+                          : "Pending"}
+                    </span>
+                  </div>
+                  <div class="muted" style="margin-top: 4px;">${step.description}</div>
+                </div>
+                ${step.actionLabel && step.onAction
+                  ? html`
+                      <button class="btn btn--sm" @click=${step.onAction}>${step.actionLabel}</button>
+                    `
+                  : nothing}
+              </div>
+            </div>
+          `,
+        )}
+      </div>
+    </section>
+  `;
 }
 
 function computeDiff(
@@ -969,6 +1037,8 @@ export function renderConfig(props: ConfigProps) {
             </button>
           </div>
         </div>
+
+        ${props.desktopSetup ? renderDesktopSetupBanner(props.desktopSetup) : nothing}
 
         ${settingsLayout === "accordion"
           ? renderAccordionNav()

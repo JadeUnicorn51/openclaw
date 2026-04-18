@@ -484,4 +484,37 @@ describe("config view", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     expect(onFormPatch).toHaveBeenCalledWith(["gateway", "mode"], "local");
   });
+
+  it("renders the desktop setup checklist when provided", () => {
+    const { container } = renderConfigView({
+      desktopSetup: {
+        title: "Desktop Setup Checklist",
+        summary: "2 of 3 setup areas are ready.",
+        completedCount: 2,
+        totalCount: 3,
+        steps: [
+          {
+            id: "models",
+            label: "Configure Models",
+            description: "Provider credentials are configured.",
+            status: "done",
+          },
+          {
+            id: "channels",
+            label: "Configure Channels",
+            description: "Connect a channel for notifications.",
+            status: "active",
+            actionLabel: "Open Communications",
+            onAction: vi.fn(),
+          },
+        ],
+      },
+    });
+
+    const banner = container.querySelector('[data-testid="desktop-setup-flow"]');
+    expect(banner).not.toBeNull();
+    expect(normalizedText(container)).toContain("Desktop Setup Checklist");
+    expect(normalizedText(container)).toContain("2/3 complete");
+    expect(normalizedText(container)).toContain("Open Communications");
+  });
 });

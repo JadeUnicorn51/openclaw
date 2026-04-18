@@ -81,6 +81,20 @@ export type QuickSettingsProps = {
 
   // Navigation
   onAdvancedSettings?: () => void;
+  desktopSetup?: {
+    title: string;
+    summary: string;
+    completedCount: number;
+    totalCount: number;
+    steps: Array<{
+      id: string;
+      label: string;
+      description: string;
+      status: "done" | "active" | "todo";
+      actionLabel?: string;
+      onAction?: () => void;
+    }>;
+  } | null;
 
   // Connection
   connected: boolean;
@@ -418,6 +432,56 @@ function renderConnectionFooter(props: QuickSettingsProps) {
   `;
 }
 
+function renderDesktopSetupCard(
+  setup: NonNullable<QuickSettingsProps["desktopSetup"]>,
+): TemplateResult {
+  return html`
+    <section class="qs-card qs-card--span-all" data-testid="desktop-setup-card">
+      ${renderCardHeader(icons.monitor, setup.title)}
+      <div class="qs-card__body">
+        <div class="muted" style="margin-bottom: 14px;">${setup.summary}</div>
+        <div class="pill" style="margin-bottom: 14px; display: inline-flex;">
+          ${setup.completedCount}/${setup.totalCount} complete
+        </div>
+        <div style="display: grid; gap: 10px;">
+          ${setup.steps.map(
+            (step, index) => html`
+              <div
+                style="border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px;"
+              >
+                <div
+                  style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;"
+                >
+                  <div>
+                    <div style="font-weight: 600;">
+                      ${index + 1}. ${step.label}
+                      <span class="muted" style="margin-left: 8px;">
+                        ${step.status === "done"
+                          ? "Done"
+                          : step.status === "active"
+                            ? "Next"
+                            : "Pending"}
+                      </span>
+                    </div>
+                    <div class="muted" style="margin-top: 4px;">${step.description}</div>
+                  </div>
+                  ${step.actionLabel && step.onAction
+                    ? html`
+                        <button class="btn btn--sm" @click=${step.onAction}>
+                          ${step.actionLabel}
+                        </button>
+                      `
+                    : nothing}
+                </div>
+              </div>
+            `,
+          )}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 // ── Main render ──
 
 export function renderQuickSettings(props: QuickSettingsProps) {
@@ -431,6 +495,7 @@ export function renderQuickSettings(props: QuickSettingsProps) {
       </div>
 
       <div class="qs-grid">
+        ${props.desktopSetup ? renderDesktopSetupCard(props.desktopSetup) : nothing}
         ${renderModelCard(props)} ${renderChannelsCard(props)} ${renderApiKeysCard(props)}
         ${renderAutomationsCard(props)} ${renderSecurityCard(props)} ${renderAppearanceCard(props)}
         ${renderPresetsCard(props)}
