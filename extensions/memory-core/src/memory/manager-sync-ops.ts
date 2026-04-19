@@ -985,6 +985,8 @@ export abstract class MemoryManagerSyncOps {
         configuredScopeHash,
         chunkTokens: this.settings.chunking.tokens,
         chunkOverlap: this.settings.chunking.overlap,
+        chunkStrategy: this.settings.chunking.strategy,
+        chunkWholeDocMaxChars: this.settings.chunking.wholeDocMaxChars,
         vectorReady,
         ftsTokenizer: this.settings.store.fts.tokenizer,
       });
@@ -1201,6 +1203,8 @@ export abstract class MemoryManagerSyncOps {
             }),
             chunkTokens: this.settings.chunking.tokens,
             chunkOverlap: this.settings.chunking.overlap,
+            chunkStrategy: this.settings.chunking.strategy,
+            chunkWholeDocMaxChars: this.settings.chunking.wholeDocMaxChars,
             ftsTokenizer: this.settings.store.fts.tokenizer,
           };
 
@@ -1277,6 +1281,8 @@ export abstract class MemoryManagerSyncOps {
       }),
       chunkTokens: this.settings.chunking.tokens,
       chunkOverlap: this.settings.chunking.overlap,
+      chunkStrategy: this.settings.chunking.strategy,
+      chunkWholeDocMaxChars: this.settings.chunking.wholeDocMaxChars,
       ftsTokenizer: this.settings.store.fts.tokenizer,
     };
     if (this.vector.available && this.vector.dims) {

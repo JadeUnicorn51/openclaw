@@ -12,6 +12,8 @@ export type MemoryIndexMeta = {
   scopeHash?: string;
   chunkTokens: number;
   chunkOverlap: number;
+  chunkStrategy?: "tokens" | "paragraphs" | "section" | "whole_doc";
+  chunkWholeDocMaxChars?: number;
   vectorDims?: number;
   ftsTokenizer?: string;
 };
@@ -81,6 +83,8 @@ export function shouldRunFullMemoryReindex(params: {
   configuredScopeHash: string;
   chunkTokens: number;
   chunkOverlap: number;
+  chunkStrategy: "tokens" | "paragraphs" | "section" | "whole_doc";
+  chunkWholeDocMaxChars: number;
   vectorReady: boolean;
   ftsTokenizer: string;
 }): boolean {
@@ -97,6 +101,8 @@ export function shouldRunFullMemoryReindex(params: {
     meta.scopeHash !== params.configuredScopeHash ||
     meta.chunkTokens !== params.chunkTokens ||
     meta.chunkOverlap !== params.chunkOverlap ||
+    (meta.chunkStrategy ?? "tokens") !== params.chunkStrategy ||
+    (meta.chunkWholeDocMaxChars ?? 16_000) !== params.chunkWholeDocMaxChars ||
     (params.vectorReady && !meta.vectorDims) ||
     (meta.ftsTokenizer ?? "unicode61") !== params.ftsTokenizer
   );

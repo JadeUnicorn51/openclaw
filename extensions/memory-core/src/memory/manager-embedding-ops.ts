@@ -9,8 +9,9 @@ import { createSubsystemLogger } from "openclaw/plugin-sdk/memory-core-host-engi
 import { type SessionFileEntry } from "openclaw/plugin-sdk/memory-core-host-engine-qmd";
 import {
   buildMultimodalChunkForIndexing,
-  chunkMarkdown,
+  chunkMemoryContent,
   hashText,
+  MemoryWholeDocumentLimitError,
   remapChunkLines,
   type MemoryChunk,
   type MemoryFileEntry,
@@ -591,7 +592,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
         return;
       }
       const content = options.content ?? (await fs.readFile(entry.absPath, "utf-8"));
-      const chunks = filterNonEmptyMemoryChunks(chunkMarkdown(content, this.settings.chunking));
+      const chunks = this.chunkContentForIndexing(content, entry.path);
       if (options.source === "sessions" && "lineMap" in entry) {
         remapChunkLines(chunks, entry.lineMap);
       }
@@ -621,7 +622,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
       chunks = [multimodalChunk.chunk];
     } else {
       const content = options.content ?? (await fs.readFile(entry.absPath, "utf-8"));
-      const baseChunks = filterNonEmptyMemoryChunks(chunkMarkdown(content, this.settings.chunking));
+      const baseChunks = this.chunkContentForIndexing(content, entry.path);
       chunks = this.provider
         ? enforceEmbeddingMaxInputTokens(this.provider, baseChunks, EMBEDDING_BATCH_MAX_TOKENS)
         : baseChunks;
@@ -664,5 +665,26 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     const sample = embeddings.find((embedding) => embedding.length > 0);
     const vectorReady = sample ? await this.ensureVectorReady(sample.length) : false;
     this.writeChunks(entry, options.source, this.provider.model, chunks, embeddings, vectorReady);
+  }
+
+  private chunkContentForIndexing(content: string, pathForLog: string): MemoryChunk[] {
+    try {
+      return filterNonEmptyMemoryChunks(chunkMemoryContent(content, this.settings.chunking));
+    } catch (err) {
+      if (err instanceof MemoryWholeDocumentLimitError) {
+        log.warn("memory chunking: whole_doc size exceeded, falling back to tokens strategy", {
+          path: pathForLog,
+          estimatedChars: err.estimatedChars,
+          maxChars: err.maxChars,
+        });
+        return filterNonEmptyMemoryChunks(
+          chunkMemoryContent(content, {
+            ...this.settings.chunking,
+            strategy: "tokens",
+          }),
+        );
+      }
+      throw err;
+    }
   }
 }

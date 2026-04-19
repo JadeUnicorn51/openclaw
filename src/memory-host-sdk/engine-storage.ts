@@ -15,6 +15,16 @@ export {
   type MemoryChunk,
   type MemoryFileEntry,
 } from "./host/internal.js";
+export {
+  chunkMemoryContent,
+  resolveMemoryChunkingStrategy,
+  resolveWholeDocMaxChars,
+  type MemoryChunkingConfig,
+} from "./host/chunk-factory.js";
+export {
+  MemoryWholeDocumentLimitError,
+  type MemoryChunkingStrategy,
+} from "./host/chunk-strategies.js";
 export { readMemoryFile } from "./host/read-file.js";
 export {
   buildMemoryReadResult,

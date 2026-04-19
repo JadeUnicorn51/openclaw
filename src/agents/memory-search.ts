@@ -54,6 +54,8 @@ export type ResolvedMemorySearchConfig = {
   chunking: {
     tokens: number;
     overlap: number;
+    strategy: "tokens" | "paragraphs" | "section" | "whole_doc";
+    wholeDocMaxChars: number;
   };
   sync: {
     onSessionStart: boolean;
@@ -95,6 +97,8 @@ export type ResolvedMemorySearchSyncConfig = ResolvedMemorySearchConfig["sync"];
 
 const DEFAULT_CHUNK_TOKENS = 400;
 const DEFAULT_CHUNK_OVERLAP = 80;
+const DEFAULT_CHUNK_STRATEGY: ResolvedMemorySearchConfig["chunking"]["strategy"] = "tokens";
+const DEFAULT_WHOLE_DOC_MAX_CHARS = 16_000;
 const DEFAULT_WATCH_DEBOUNCE_MS = 1500;
 const DEFAULT_SESSION_DELTA_BYTES = 100_000;
 const DEFAULT_SESSION_DELTA_MESSAGES = 50;
@@ -110,6 +114,15 @@ const DEFAULT_TEMPORAL_DECAY_ENABLED = false;
 const DEFAULT_TEMPORAL_DECAY_HALF_LIFE_DAYS = 30;
 const DEFAULT_CACHE_ENABLED = true;
 const DEFAULT_SOURCES: Array<"memory" | "sessions"> = ["memory"];
+
+function normalizeChunkingStrategy(
+  value: unknown,
+): ResolvedMemorySearchConfig["chunking"]["strategy"] {
+  if (value === "tokens" || value === "paragraphs" || value === "section" || value === "whole_doc") {
+    return value;
+  }
+  return DEFAULT_CHUNK_STRATEGY;
+}
 
 function normalizeSources(
   sources: Array<"memory" | "sessions"> | undefined,
@@ -223,6 +236,14 @@ function mergeConfig(
   const chunking = {
     tokens: overrides?.chunking?.tokens ?? defaults?.chunking?.tokens ?? DEFAULT_CHUNK_TOKENS,
     overlap: overrides?.chunking?.overlap ?? defaults?.chunking?.overlap ?? DEFAULT_CHUNK_OVERLAP,
+    strategy: normalizeChunkingStrategy(
+      (overrides?.chunking as { strategy?: unknown } | undefined)?.strategy ??
+        (defaults?.chunking as { strategy?: unknown } | undefined)?.strategy,
+    ),
+    wholeDocMaxChars:
+      (overrides?.chunking as { wholeDocMaxChars?: number } | undefined)?.wholeDocMaxChars ??
+      (defaults?.chunking as { wholeDocMaxChars?: number } | undefined)?.wholeDocMaxChars ??
+      DEFAULT_WHOLE_DOC_MAX_CHARS,
   };
   const sync = resolveSyncConfig(defaults, overrides);
   const query = {
@@ -306,7 +327,12 @@ function mergeConfig(
     outputDimensionality,
     local,
     store,
-    chunking: { tokens: Math.max(1, chunking.tokens), overlap },
+    chunking: {
+      tokens: Math.max(1, chunking.tokens),
+      overlap,
+      strategy: chunking.strategy,
+      wholeDocMaxChars: clampInt(chunking.wholeDocMaxChars, 1, Number.MAX_SAFE_INTEGER),
+    },
     sync: {
       ...sync,
       sessions: {

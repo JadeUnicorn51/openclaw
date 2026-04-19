@@ -16,6 +16,8 @@ function createMeta(overrides: Partial<MemoryIndexMeta> = {}): MemoryIndexMeta {
     scopeHash: "scope-v1",
     chunkTokens: 4000,
     chunkOverlap: 0,
+    chunkStrategy: "tokens",
+    chunkWholeDocMaxChars: 16_000,
     ftsTokenizer: "unicode61",
     ...overrides,
   };
@@ -30,6 +32,8 @@ function createFullReindexParams(
     configuredScopeHash?: string;
     chunkTokens?: number;
     chunkOverlap?: number;
+    chunkStrategy?: "tokens" | "paragraphs" | "section" | "whole_doc";
+    chunkWholeDocMaxChars?: number;
     vectorReady?: boolean;
     ftsTokenizer?: string;
   } = {},
@@ -42,6 +46,8 @@ function createFullReindexParams(
     configuredScopeHash: "scope-v1",
     chunkTokens: 4000,
     chunkOverlap: 0,
+    chunkStrategy: "tokens" as const,
+    chunkWholeDocMaxChars: 16_000,
     vectorReady: false,
     ftsTokenizer: "unicode61",
     ...overrides,
@@ -142,6 +148,27 @@ describe("memory reindex state", () => {
         createFullReindexParams({
           meta: createMeta({ scopeHash: firstScopeHash }),
           configuredScopeHash: secondScopeHash,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("requires a full reindex when chunking strategy changes", () => {
+    expect(
+      shouldRunFullMemoryReindex(
+        createFullReindexParams({
+          chunkStrategy: "section",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("requires a full reindex when whole_doc max chars changes", () => {
+    expect(
+      shouldRunFullMemoryReindex(
+        createFullReindexParams({
+          meta: createMeta({ chunkWholeDocMaxChars: 8_000 }),
+          chunkWholeDocMaxChars: 16_000,
         }),
       ),
     ).toBe(true);
