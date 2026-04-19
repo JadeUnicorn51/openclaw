@@ -224,6 +224,31 @@ describe("control UI routing", () => {
     expect(app.querySelector('a.nav-item[href="/overview"]')).not.toBeNull();
   });
 
+  it("keeps the sidebar visible while navigating during onboarding", async () => {
+    const app = mountApp("/overview?onboarding=1");
+    await app.updateComplete;
+
+    const chatLink = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/chat"]');
+    expect(chatLink).not.toBeNull();
+    chatLink?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    await app.updateComplete;
+
+    expect(app.tab).toBe("chat");
+    expect(app.querySelector(".sidebar-shell")).not.toBeNull();
+    expect(app.querySelector(".shell-nav")).not.toBeNull();
+
+    const channelsLink = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/channels"]');
+    expect(channelsLink).not.toBeNull();
+    channelsLink?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
+    );
+    await app.updateComplete;
+
+    expect(app.tab).toBe("channels");
+    expect(app.querySelector(".sidebar-shell")).not.toBeNull();
+    expect(app.querySelector(".shell-nav")).not.toBeNull();
+  });
+
   it("auto-scrolls chat history to the latest message", async () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       queueMicrotask(() => callback(performance.now()));

@@ -905,7 +905,7 @@ export function renderApp(state: AppViewState) {
   const chatDisabledReason = state.connected ? null : t("chat.disconnected");
   const isChat = state.tab === "chat";
   const chatFocus = isChat && state.settings.chatFocusMode;
-  const hideShellForOnboarding = state.onboarding && isChat;
+  const hideShellForOnboarding = false;
   const navDrawerOpen = state.navDrawerOpen && !chatFocus;
   const navCollapsed = state.settings.navCollapsed && !navDrawerOpen;
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
