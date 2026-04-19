@@ -68,6 +68,7 @@ const BOOTSTRAP_PAGE = `<!doctype html>
 export type MainWindowOptions = {
   dashboardUrl: string;
   preloadPath: string;
+  startHidden?: boolean;
 };
 
 function isTrustedWindowUrl(url: string, dashboardUrl: string): boolean {
@@ -238,9 +239,11 @@ export function createMainWindow(options: MainWindowOptions): ElectronBrowserWin
     title: "PurchaseAI",
   });
 
-  window.once("ready-to-show", () => {
-    window.show();
-  });
+  if (!options.startHidden) {
+    window.once("ready-to-show", () => {
+      window.show();
+    });
+  }
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (!isTrustedWindowUrl(url, options.dashboardUrl)) {

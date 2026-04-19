@@ -387,6 +387,8 @@ type DesktopSetupFlow = {
   steps: DesktopSetupStep[];
 };
 
+type DesktopWorkspaceSummary = NonNullable<AppViewState["desktopWorkspacesSummary"]>;
+
 const SCOPED_CONFIG_SECTION_KEYS = new Set<string>([
   ...COMMUNICATION_SECTION_KEYS,
   ...APPEARANCE_SECTION_KEYS,
@@ -618,6 +620,9 @@ function resolveDesktopSetupFlow(
     security.gatewayAuth !== "unknown" &&
     security.gatewayAuth !== "none" &&
     Boolean(state.configSnapshot?.path);
+  const workspaceReady =
+    (state.desktopWorkspacesSummary?.workspaces?.length ?? 0) > 0 &&
+    Boolean(state.desktopWorkspacesSummary?.activeWorkspaceId);
 
   const activateTab = (
     tab: "aiAgents" | "communications" | "infrastructure",
@@ -641,6 +646,20 @@ function resolveDesktopSetupFlow(
   };
 
   const steps: DesktopSetupStep[] = [
+    {
+      id: "workspace",
+      label: "Prepare Workspace",
+      description: workspaceReady
+        ? "A local workspace is active and isolated storage is ready."
+        : "Create a dedicated workspace before importing procurement documents.",
+      status: workspaceReady ? "done" : "todo",
+      actionLabel: "Open Settings",
+      onAction: () => {
+        state.setTab("config" as import("./navigation.ts").Tab);
+        state.configSettingsMode = "quick";
+        requestHostUpdate?.();
+      },
+    },
     {
       id: "models",
       label: "Configure Models",
@@ -695,6 +714,100 @@ function resolveDesktopSetupFlow(
     totalCount,
     steps,
   };
+}
+
+function hasDesktopWorkspaceApi(): boolean {
+  return Boolean(
+    typeof window !== "undefined" &&
+      window.openclawDesktop?.isDesktop === true &&
+      window.openclawDesktopApi?.listWorkspaces &&
+      window.openclawDesktopApi?.createWorkspace &&
+      window.openclawDesktopApi?.switchWorkspace &&
+      window.openclawDesktopApi?.deleteWorkspace,
+  );
+}
+
+function resolveDesktopWorkspaceSummary(state: AppViewState): DesktopWorkspaceSummary | null {
+  return state.desktopWorkspacesSummary ?? null;
+}
+
+async function createDesktopWorkspace(
+  state: AppViewState,
+  requestHostUpdate: (() => void) | undefined,
+): Promise<void> {
+  const api = window.openclawDesktopApi;
+  if (!api?.createWorkspace) {
+    return;
+  }
+  const nextName = state.desktopWorkspaceNameDraft.trim();
+  if (!nextName) {
+    state.desktopWorkspacesError = "Workspace name is required.";
+    requestHostUpdate?.();
+    return;
+  }
+  state.desktopWorkspaceBusyId = "__create__";
+  state.desktopWorkspacesError = null;
+  try {
+    await api.createWorkspace(nextName);
+    state.desktopWorkspaceNameDraft = "";
+    await state.loadDesktopWorkspaces?.(true);
+  } catch (error) {
+    state.desktopWorkspacesError = String(error);
+  } finally {
+    state.desktopWorkspaceBusyId = null;
+    requestHostUpdate?.();
+  }
+}
+
+async function switchDesktopWorkspace(
+  state: AppViewState,
+  requestHostUpdate: (() => void) | undefined,
+  workspaceId: string,
+): Promise<void> {
+  const api = window.openclawDesktopApi;
+  if (!api?.switchWorkspace) {
+    return;
+  }
+  state.desktopWorkspaceBusyId = workspaceId;
+  state.desktopWorkspacesError = null;
+  try {
+    const result = await api.switchWorkspace(workspaceId);
+    await state.loadDesktopWorkspaces?.(true);
+    state.desktopWorkspaceNotice = result.requiresRestart
+      ? "Workspace switched. Restart the desktop app to reload the gateway with the new workspace."
+      : "Workspace switched.";
+  } catch (error) {
+    state.desktopWorkspacesError = String(error);
+  } finally {
+    state.desktopWorkspaceBusyId = null;
+    requestHostUpdate?.();
+  }
+}
+
+async function deleteDesktopWorkspace(
+  state: AppViewState,
+  requestHostUpdate: (() => void) | undefined,
+  workspaceId: string,
+): Promise<void> {
+  const api = window.openclawDesktopApi;
+  if (!api?.deleteWorkspace) {
+    return;
+  }
+  const confirmed = window.confirm("Delete this workspace and all local files in it?");
+  if (!confirmed) {
+    return;
+  }
+  state.desktopWorkspaceBusyId = workspaceId;
+  state.desktopWorkspacesError = null;
+  try {
+    await api.deleteWorkspace(workspaceId);
+    await state.loadDesktopWorkspaces?.(true);
+  } catch (error) {
+    state.desktopWorkspacesError = String(error);
+  } finally {
+    state.desktopWorkspaceBusyId = null;
+    requestHostUpdate?.();
+  }
 }
 
 async function applyQuickSettingsPreset(state: AppViewState, presetId: ConfigPresetId) {
@@ -791,8 +904,9 @@ export function renderApp(state: AppViewState) {
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const chatDisabledReason = state.connected ? null : t("chat.disconnected");
   const isChat = state.tab === "chat";
-  const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
-  const navDrawerOpen = state.navDrawerOpen && !chatFocus && !state.onboarding;
+  const chatFocus = isChat && state.settings.chatFocusMode;
+  const hideShellForOnboarding = state.onboarding && isChat;
+  const navDrawerOpen = state.navDrawerOpen && !chatFocus;
   const navCollapsed = state.settings.navCollapsed && !navDrawerOpen;
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const showToolCalls = state.onboarding ? true : state.settings.chatShowToolCalls;
@@ -1051,6 +1165,14 @@ export function renderApp(state: AppViewState) {
       case "config": {
         // Quick Settings mode — opinionated card layout
         if (state.configSettingsMode === "quick") {
+          if (
+            hasDesktopWorkspaceApi() &&
+            !state.desktopWorkspacesLoaded &&
+            !state.desktopWorkspacesLoading &&
+            state.loadDesktopWorkspaces
+          ) {
+            void state.loadDesktopWorkspaces();
+          }
           const configObj = state.configForm ?? state.configSnapshot?.config ?? {};
           const agentsDefaults = ((configObj.agents as Record<string, unknown> | undefined)
             ?.defaults ?? {}) as Record<string, unknown>;
@@ -1071,6 +1193,7 @@ export function renderApp(state: AppViewState) {
             typeof activeSession?.fastMode === "boolean"
               ? activeSession.fastMode
               : agentsDefaults.fastMode === true;
+          const workspaceSummary = resolveDesktopWorkspaceSummary(state);
           return renderQuickSettings({
             currentModel,
             thinkingLevel,
@@ -1142,6 +1265,41 @@ export function renderApp(state: AppViewState) {
               requestHostUpdate?.();
             },
             desktopSetup,
+            workspaceManagement: hasDesktopWorkspaceApi()
+              ? {
+                  loading: state.desktopWorkspacesLoading ?? false,
+                  error: state.desktopWorkspacesError ?? null,
+                  notice: state.desktopWorkspaceNotice ?? null,
+                  activeWorkspaceId: workspaceSummary?.activeWorkspaceId ?? null,
+                  workspaces: workspaceSummary?.workspaces ?? [],
+                  createName: state.desktopWorkspaceNameDraft ?? "",
+                  busyWorkspaceId: state.desktopWorkspaceBusyId ?? null,
+                  onCreateNameChange: (next) => {
+                    state.desktopWorkspaceNameDraft = next;
+                    if (state.desktopWorkspacesError) {
+                      state.desktopWorkspacesError = null;
+                    }
+                    requestHostUpdate?.();
+                  },
+                  onRefresh: () => {
+                    state.desktopWorkspaceNotice = null;
+                    void state.loadDesktopWorkspaces?.(true).then(() => requestHostUpdate?.());
+                  },
+                  onCreate: () => {
+                    void createDesktopWorkspace(state, requestHostUpdate);
+                  },
+                  onSwitch: (workspaceId) => {
+                    void switchDesktopWorkspace(state, requestHostUpdate, workspaceId);
+                  },
+                  onDelete: (workspaceId) => {
+                    void deleteDesktopWorkspace(state, requestHostUpdate, workspaceId);
+                  },
+                  onRestart: () => {
+                    state.markDesktopRestartRestore?.("config");
+                    void window.openclawDesktopApi?.quit?.();
+                  },
+                }
+              : null,
             connected: state.connected,
             gatewayUrl: state.settings.gatewayUrl,
             assistantName: state.assistantName,
@@ -1336,7 +1494,7 @@ export function renderApp(state: AppViewState) {
         ? "shell--chat-focus"
         : ""} ${navCollapsed ? "shell--nav-collapsed" : ""} ${navDrawerOpen
         ? "shell--nav-drawer-open"
-        : ""} ${state.onboarding ? "shell--onboarding" : ""}"
+        : ""} ${hideShellForOnboarding ? "shell--onboarding" : ""}"
     >
       <button
         type="button"
@@ -1619,6 +1777,19 @@ export function renderApp(state: AppViewState) {
               onRefresh: () => state.loadOverview({ refresh: true }),
               onNavigate: (tab) => state.setTab(tab as import("./navigation.ts").Tab),
               onRefreshLogs: () => state.loadOverview({ refresh: true }),
+              workspaceSummary: state.desktopWorkspacesSummary ?? null,
+              workspaceLoading: state.desktopWorkspacesLoading ?? false,
+              workspaceError: state.desktopWorkspacesError ?? null,
+              onOpenWorkspaceSettings: () => {
+                state.setTab("config" as import("./navigation.ts").Tab);
+                state.configSettingsMode = "quick";
+                void state.loadDesktopWorkspaces?.(true);
+                requestHostUpdate?.();
+              },
+              onRestartDesktop: () => {
+                state.markDesktopRestartRestore?.("overview");
+                void window.openclawDesktopApi?.quit?.();
+              },
             })
           : nothing}
         ${state.tab === "channels"

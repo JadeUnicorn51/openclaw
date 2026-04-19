@@ -61,6 +61,20 @@ export type OverviewProps = {
   onRefresh: () => void;
   onNavigate: (tab: string) => void;
   onRefreshLogs: () => void;
+  workspaceSummary?: {
+    activeWorkspaceId: string;
+    workspaces: Array<{
+      id: string;
+      name: string;
+      path: string;
+      createdAtMs: number;
+      updatedAtMs: number;
+    }>;
+  } | null;
+  workspaceLoading?: boolean;
+  workspaceError?: string | null;
+  onOpenWorkspaceSettings?: () => void;
+  onRestartDesktop?: () => void;
 };
 
 export function renderOverview(props: OverviewProps) {
@@ -218,6 +232,10 @@ export function renderOverview(props: OverviewProps) {
   const currentLocale = isSupportedLocale(props.settings.locale)
     ? props.settings.locale
     : i18n.getLocale();
+  const activeWorkspace =
+    props.workspaceSummary?.workspaces?.find(
+      (entry) => entry.id === props.workspaceSummary?.activeWorkspaceId,
+    ) ?? null;
 
   return html`
     <section class="grid">
@@ -441,6 +459,33 @@ export function renderOverview(props: OverviewProps) {
               <button class="btn btn-primary" @click=${() => props.onNavigate("chat")}>
                 Open Chat
               </button>
+            </div>
+            <div class="callout" style="margin-top: 14px;">
+              <div style="font-weight: 600;">Workspace Summary</div>
+              ${props.workspaceLoading
+                ? html`<div class="muted" style="margin-top: 8px;">Loading workspaces...</div>`
+                : nothing}
+              ${props.workspaceError
+                ? html`<div class="muted" style="margin-top: 8px; color: var(--danger, #d43f3a);">
+                    ${props.workspaceError}
+                  </div>`
+                : nothing}
+              ${activeWorkspace
+                ? html`
+                    <div style="margin-top: 8px;">
+                      <strong>Active</strong>: ${activeWorkspace.name}
+                    </div>
+                    <div class="mono" style="margin-top: 6px;">${activeWorkspace.path}</div>
+                  `
+                : html`<div class="muted" style="margin-top: 8px;">
+                    No active workspace metadata loaded yet.
+                  </div>`}
+              <div class="row" style="margin-top: 10px; flex-wrap: wrap;">
+                <button class="btn" @click=${props.onOpenWorkspaceSettings}>
+                  Open Workspace Settings
+                </button>
+                <button class="btn" @click=${props.onRestartDesktop}>Restart App</button>
+              </div>
             </div>
           </section>
           <div class="ov-section-divider"></div>

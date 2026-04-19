@@ -14,6 +14,7 @@ describe("prepareDesktopBootstrapState", () => {
     delete process.env.OPENCLAW_STATE_DIR;
     delete process.env.OPENCLAW_CONFIG_PATH;
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    delete process.env.OPENCLAW_WORKSPACE;
   });
 
   it("creates a dedicated local-mode config for a fresh desktop install", async () => {
@@ -42,6 +43,7 @@ describe("prepareDesktopBootstrapState", () => {
     expect(process.env.OPENCLAW_STATE_DIR).toBe(stateDir);
     expect(process.env.OPENCLAW_CONFIG_PATH).toBe(state.configPath);
     expect(process.env.OPENCLAW_GATEWAY_TOKEN).toBe(state.gatewayToken);
+    expect(process.env.OPENCLAW_WORKSPACE).toBe(state.workspaceDir);
   });
 
   it("repairs an existing desktop config that is missing gateway.mode", async () => {

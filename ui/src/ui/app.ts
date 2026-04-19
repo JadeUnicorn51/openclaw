@@ -115,6 +115,7 @@ declare global {
 }
 
 const bootAssistantIdentity = normalizeAssistantIdentity({});
+const DESKTOP_RESTART_RESTORE_KEY = "openclaw.desktop.restart-restore.v1";
 
 function resolveOnboardingMode(): boolean {
   const desktopNeedsSetup = window.openclawDesktop?.needsSetup === true;
@@ -128,6 +129,52 @@ function resolveOnboardingMode(): boolean {
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function readDesktopRestartRestoreState():
+  | { tab?: Tab; configSettingsMode?: "quick" | "advanced" }
+  | null {
+  try {
+    const raw = localStorage.getItem(DESKTOP_RESTART_RESTORE_KEY);
+    if (!raw) {
+      return null;
+    }
+    localStorage.removeItem(DESKTOP_RESTART_RESTORE_KEY);
+    const parsed = JSON.parse(raw) as {
+      tab?: unknown;
+      configSettingsMode?: unknown;
+      ts?: unknown;
+    };
+    const ts = typeof parsed.ts === "number" ? parsed.ts : 0;
+    if (!Number.isFinite(ts) || Date.now() - ts > 5 * 60_000) {
+      return null;
+    }
+    const tab = typeof parsed.tab === "string" ? (parsed.tab as Tab) : undefined;
+    const configSettingsMode =
+      parsed.configSettingsMode === "quick" || parsed.configSettingsMode === "advanced"
+        ? parsed.configSettingsMode
+        : undefined;
+    return { tab, configSettingsMode };
+  } catch {
+    return null;
+  }
+}
+
+function writeDesktopRestartRestoreState(
+  state: { tab: Tab; configSettingsMode: "quick" | "advanced" },
+): void {
+  try {
+    localStorage.setItem(
+      DESKTOP_RESTART_RESTORE_KEY,
+      JSON.stringify({
+        tab: state.tab,
+        configSettingsMode: state.configSettingsMode,
+        ts: Date.now(),
+      }),
+    );
+  } catch {
+    // best effort
+  }
 }
 
 @customElement("openclaw-app")
@@ -234,6 +281,22 @@ export class OpenClawApp extends LitElement {
   @state() configUiHints: ConfigUiHints = {};
   @state() configForm: Record<string, unknown> | null = null;
   @state() configFormOriginal: Record<string, unknown> | null = null;
+  @state() desktopWorkspacesLoading = false;
+  @state() desktopWorkspacesLoaded = false;
+  @state() desktopWorkspacesError: string | null = null;
+  @state() desktopWorkspacesSummary: {
+    activeWorkspaceId: string;
+    workspaces: Array<{
+      id: string;
+      name: string;
+      path: string;
+      createdAtMs: number;
+      updatedAtMs: number;
+    }>;
+  } | null = null;
+  @state() desktopWorkspaceNameDraft = "";
+  @state() desktopWorkspaceBusyId: string | null = null;
+  @state() desktopWorkspaceNotice: string | null = null;
   @state() dreamingStatusLoading = false;
   @state() dreamingStatusError: string | null = null;
   @state() dreamingStatus: DreamingStatus | null = null;
@@ -539,6 +602,13 @@ export class OpenClawApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    const restoreState = readDesktopRestartRestoreState();
+    if (restoreState?.tab) {
+      this.tab = restoreState.tab;
+    }
+    if (restoreState?.configSettingsMode) {
+      this.configSettingsMode = restoreState.configSettingsMode;
+    }
     this.onSlashAction = (action: string) => {
       switch (action) {
         case "toggle-focus":
@@ -572,22 +642,33 @@ export class OpenClawApp extends LitElement {
 
   protected updated(changed: Map<PropertyKey, unknown>) {
     handleUpdated(this as unknown as Parameters<typeof handleUpdated>[0], changed);
-    if (!changed.has("sessionKey") || this.agentsPanel !== "tools") {
-      return;
+    if (changed.has("sessionKey") && this.agentsPanel === "tools") {
+      const activeSessionAgentId = resolveAgentIdFromSessionKey(this.sessionKey);
+      if (this.agentsSelectedId && this.agentsSelectedId === activeSessionAgentId) {
+        void loadToolsEffectiveInternal(this, {
+          agentId: this.agentsSelectedId,
+          sessionKey: this.sessionKey,
+        });
+      } else {
+        this.toolsEffectiveResult = null;
+        this.toolsEffectiveResultKey = null;
+        this.toolsEffectiveError = null;
+        this.toolsEffectiveLoading = false;
+        this.toolsEffectiveLoadingKey = null;
+      }
     }
-    const activeSessionAgentId = resolveAgentIdFromSessionKey(this.sessionKey);
-    if (this.agentsSelectedId && this.agentsSelectedId === activeSessionAgentId) {
-      void loadToolsEffectiveInternal(this, {
-        agentId: this.agentsSelectedId,
-        sessionKey: this.sessionKey,
-      });
-      return;
+
+    if (changed.has("tab") || changed.has("configSettingsMode")) {
+      const desktopApi = window.openclawDesktopApi;
+      const inQuickSettings = this.tab === "config" && this.configSettingsMode === "quick";
+      const onOverview = this.tab === "overview";
+      const canLoadWorkspaces = Boolean(
+        desktopApi?.listWorkspaces && window.openclawDesktop?.isDesktop === true,
+      );
+      if ((inQuickSettings || onOverview) && canLoadWorkspaces && !this.desktopWorkspacesLoaded) {
+        void this.loadDesktopWorkspaces();
+      }
     }
-    this.toolsEffectiveResult = null;
-    this.toolsEffectiveResultKey = null;
-    this.toolsEffectiveError = null;
-    this.toolsEffectiveLoading = false;
-    this.toolsEffectiveLoadingKey = null;
   }
 
   connect() {
@@ -663,6 +744,13 @@ export class OpenClawApp extends LitElement {
     this.requestUpdate();
   }
 
+  markDesktopRestartRestore(tabOverride?: Tab) {
+    writeDesktopRestartRestoreState({
+      tab: tabOverride ?? this.tab,
+      configSettingsMode: this.configSettingsMode,
+    });
+  }
+
   buildThemeOrder(active: ThemeName): ThemeName[] {
     const all = [...VALID_THEME_NAMES];
     const rest = all.filter((id) => id !== active);
@@ -675,6 +763,30 @@ export class OpenClawApp extends LitElement {
 
   async loadCron() {
     await loadCronInternal(this as unknown as Parameters<typeof loadCronInternal>[0]);
+  }
+
+  async loadDesktopWorkspaces(force = false) {
+    const api = window.openclawDesktopApi;
+    if (!api?.listWorkspaces) {
+      this.desktopWorkspacesLoaded = true;
+      return;
+    }
+    if (this.desktopWorkspacesLoading) {
+      return;
+    }
+    if (this.desktopWorkspacesLoaded && !force) {
+      return;
+    }
+    this.desktopWorkspacesLoading = true;
+    this.desktopWorkspacesError = null;
+    try {
+      this.desktopWorkspacesSummary = await api.listWorkspaces();
+      this.desktopWorkspacesLoaded = true;
+    } catch (error) {
+      this.desktopWorkspacesError = String(error);
+    } finally {
+      this.desktopWorkspacesLoading = false;
+    }
   }
 
   async handleAbortChat() {

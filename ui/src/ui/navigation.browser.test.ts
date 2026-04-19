@@ -213,6 +213,17 @@ describe("control UI routing", () => {
     expect(shell?.classList.contains("shell--chat-focus")).toBe(true);
   });
 
+  it("keeps the sidebar visible on overview during onboarding", async () => {
+    const app = mountApp("/overview?onboarding=1");
+    await app.updateComplete;
+
+    expect(app.onboarding).toBe(true);
+    expect(app.tab).toBe("overview");
+    expect(app.querySelector(".sidebar-shell")).not.toBeNull();
+    expect(app.querySelector(".sidebar-brand")).not.toBeNull();
+    expect(app.querySelector('a.nav-item[href="/overview"]')).not.toBeNull();
+  });
+
   it("auto-scrolls chat history to the latest message", async () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       queueMicrotask(() => callback(performance.now()));

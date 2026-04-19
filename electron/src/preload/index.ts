@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 const electron = require("electron") as typeof import("electron");
-const { contextBridge } = electron;
+const { contextBridge, ipcRenderer } = electron;
 
 type DesktopConfig = {
   agents?: {
@@ -179,6 +179,55 @@ contextBridge.exposeInMainWorld("openclawDesktop", {
   needsSetup: desktopBootstrap.needsSetup,
 });
 
+contextBridge.exposeInMainWorld("openclawDesktopApi", {
+  showWindow: () => ipcRenderer.invoke("desktop.window.show"),
+  hideWindow: () => ipcRenderer.invoke("desktop.window.hide"),
+  isWindowVisible: () => ipcRenderer.invoke("desktop.window.isVisible") as Promise<boolean>,
+  openExternal: (url: string) => ipcRenderer.invoke("desktop.shell.openExternal", url),
+  quit: () => ipcRenderer.invoke("desktop.app.quit"),
+  listWorkspaces: () =>
+    ipcRenderer.invoke("desktop.workspace.list") as Promise<{
+      activeWorkspaceId: string;
+      workspaces: Array<{
+        id: string;
+        name: string;
+        path: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+      }>;
+    }>,
+  createWorkspace: (name: string) =>
+    ipcRenderer.invoke("desktop.workspace.create", name) as Promise<{
+      id: string;
+      name: string;
+      path: string;
+      createdAtMs: number;
+      updatedAtMs: number;
+    }>,
+  switchWorkspace: (workspaceId: string) =>
+    ipcRenderer.invoke("desktop.workspace.switch", workspaceId) as Promise<{
+      workspace: {
+        id: string;
+        name: string;
+        path: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+      };
+      requiresRestart: boolean;
+    }>,
+  deleteWorkspace: (workspaceId: string) =>
+    ipcRenderer.invoke("desktop.workspace.delete", workspaceId) as Promise<{
+      activeWorkspaceId: string;
+      workspaces: Array<{
+        id: string;
+        name: string;
+        path: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+      }>;
+    }>,
+});
+
 declare global {
   interface Window {
     openclawDesktop?: {
@@ -189,6 +238,50 @@ declare global {
       stateDir?: string;
       workspaceDir?: string;
       needsSetup?: boolean;
+    };
+    openclawDesktopApi?: {
+      showWindow: () => Promise<void>;
+      hideWindow: () => Promise<void>;
+      isWindowVisible: () => Promise<boolean>;
+      openExternal: (url: string) => Promise<void>;
+      quit: () => Promise<void>;
+      listWorkspaces: () => Promise<{
+        activeWorkspaceId: string;
+        workspaces: Array<{
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        }>;
+      }>;
+      createWorkspace: (name: string) => Promise<{
+        id: string;
+        name: string;
+        path: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+      }>;
+      switchWorkspace: (workspaceId: string) => Promise<{
+        workspace: {
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        };
+        requiresRestart: boolean;
+      }>;
+      deleteWorkspace: (workspaceId: string) => Promise<{
+        activeWorkspaceId: string;
+        workspaces: Array<{
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        }>;
+      }>;
     };
   }
 }

@@ -71,6 +71,50 @@ declare global {
       workspaceDir?: string;
       needsSetup?: boolean;
     };
+    openclawDesktopApi?: {
+      showWindow?: () => Promise<void>;
+      hideWindow?: () => Promise<void>;
+      isWindowVisible?: () => Promise<boolean>;
+      openExternal?: (url: string) => Promise<void>;
+      quit?: () => Promise<void>;
+      listWorkspaces?: () => Promise<{
+        activeWorkspaceId: string;
+        workspaces: Array<{
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        }>;
+      }>;
+      createWorkspace?: (name: string) => Promise<{
+        id: string;
+        name: string;
+        path: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+      }>;
+      switchWorkspace?: (workspaceId: string) => Promise<{
+        workspace: {
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        };
+        requiresRestart: boolean;
+      }>;
+      deleteWorkspace?: (workspaceId: string) => Promise<{
+        activeWorkspaceId: string;
+        workspaces: Array<{
+          id: string;
+          name: string;
+          path: string;
+          createdAtMs: number;
+          updatedAtMs: number;
+        }>;
+      }>;
+    };
   }
 }
 

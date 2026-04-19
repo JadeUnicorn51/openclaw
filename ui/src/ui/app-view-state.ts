@@ -46,6 +46,19 @@ import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
+type DesktopWorkspaceEntry = {
+  id: string;
+  name: string;
+  path: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+type DesktopWorkspaceSummary = {
+  activeWorkspaceId: string;
+  workspaces: DesktopWorkspaceEntry[];
+};
+
 export type AppViewState = {
   settings: UiSettings;
   password: string;
@@ -131,6 +144,13 @@ export type AppViewState = {
   configUiHints: ConfigUiHints;
   configForm: Record<string, unknown> | null;
   configFormOriginal: Record<string, unknown> | null;
+  desktopWorkspacesLoading?: boolean;
+  desktopWorkspacesLoaded?: boolean;
+  desktopWorkspacesError?: string | null;
+  desktopWorkspacesSummary?: DesktopWorkspaceSummary | null;
+  desktopWorkspaceNameDraft?: string;
+  desktopWorkspaceBusyId?: string | null;
+  desktopWorkspaceNotice?: string | null;
   dreamingStatusLoading: boolean;
   dreamingStatusError: string | null;
   dreamingStatus: import("./controllers/dreaming.js").DreamingStatus | null;
@@ -375,10 +395,12 @@ export type AppViewState = {
     setTheme: (theme: ThemeName, context?: ThemeTransitionContext) => void;
     setThemeMode: (mode: ThemeMode, context?: ThemeTransitionContext) => void;
     setBorderRadius: (value: number) => void;
+    markDesktopRestartRestore?: (tabOverride?: Tab) => void;
     applySettings: (next: UiSettings) => void;
     loadOverview: (opts?: { refresh?: boolean }) => Promise<void>;
     loadAssistantIdentity: () => Promise<void>;
     loadCron: () => Promise<void>;
+    loadDesktopWorkspaces?: (force?: boolean) => Promise<void>;
     handleWhatsAppStart: (force: boolean) => Promise<void>;
     handleWhatsAppWait: () => Promise<void>;
     handleWhatsAppLogout: () => Promise<void>;

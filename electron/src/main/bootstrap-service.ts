@@ -56,17 +56,24 @@ function normalizeGatewayToken(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function ensureDesktopBootstrapConfig(configPath: string, workspaceDir: string): string {
+type EnsureDesktopBootstrapConfigOptions = {
+  configPath: string;
+  workspaceDir: string;
+  explicitGatewayToken?: string | null;
+};
+
+function ensureDesktopBootstrapConfig(options: EnsureDesktopBootstrapConfigOptions): string {
+  const { configPath, workspaceDir, explicitGatewayToken } = options;
   const parsed = readDesktopConfig(configPath);
   const existingToken = normalizeGatewayToken(parsed.gateway?.auth?.token);
-  const gatewayToken = existingToken ?? randomBytes(24).toString("hex");
+  const gatewayToken = explicitGatewayToken ?? existingToken ?? randomBytes(24).toString("hex");
   const nextConfig: DesktopGatewayConfig = {
     ...parsed,
     agents: {
       ...parsed.agents,
       defaults: {
         ...parsed.agents?.defaults,
-        workspace: parsed.agents?.defaults?.workspace ?? workspaceDir,
+        workspace: workspaceDir,
       },
     },
     gateway: {
@@ -88,6 +95,13 @@ function ensureDesktopBootstrapConfig(configPath: string, workspaceDir: string):
   return gatewayToken;
 }
 
+export function syncDesktopWorkspaceConfig(configPath: string, workspaceDir: string): string {
+  return ensureDesktopBootstrapConfig({
+    configPath,
+    workspaceDir,
+  });
+}
+
 export function prepareDesktopBootstrapState(): DesktopBootstrapState {
   const stateDir = resolveDesktopStateDir();
   const configPath = resolveDesktopConfigPath(stateDir);
@@ -96,11 +110,15 @@ export function prepareDesktopBootstrapState(): DesktopBootstrapState {
   fs.mkdirSync(stateDir, { recursive: true });
   fs.mkdirSync(workspaceDir, { recursive: true });
 
-  const gatewayToken = ensureDesktopBootstrapConfig(configPath, workspaceDir);
+  const gatewayToken = ensureDesktopBootstrapConfig({
+    configPath,
+    workspaceDir,
+  });
 
   process.env.OPENCLAW_STATE_DIR = stateDir;
   process.env.OPENCLAW_CONFIG_PATH = configPath;
   process.env.OPENCLAW_GATEWAY_TOKEN = gatewayToken;
+  process.env.OPENCLAW_WORKSPACE = workspaceDir;
 
   return {
     configPath,

@@ -41,6 +41,7 @@ function baseProps(): QuickSettingsProps {
     onApplyPreset: vi.fn(),
     onAdvancedSettings: vi.fn(),
     desktopSetup: null,
+    workspaceManagement: null,
     connected: true,
     gatewayUrl: "ws://127.0.0.1:18789",
     assistantName: "OpenClaw",
@@ -79,5 +80,44 @@ describe("quick settings", () => {
     expect(container.textContent).toContain("Desktop Setup Checklist");
     expect(container.textContent).toContain("1/3 complete");
     expect(container.textContent).toContain("Open AI & Agents");
+  });
+
+  it("renders workspace management when provided", () => {
+    const container = document.createElement("div");
+    render(
+      renderQuickSettings({
+        ...baseProps(),
+        workspaceManagement: {
+          loading: false,
+          error: null,
+          notice: "Workspace switched. Restart required.",
+          activeWorkspaceId: "default",
+          workspaces: [
+            {
+              id: "default",
+              name: "Default Workspace",
+              path: "C:/Users/test/.purchaseai-desktop/workspaces/default",
+              createdAtMs: Date.now(),
+              updatedAtMs: Date.now(),
+            },
+          ],
+          createName: "",
+          busyWorkspaceId: null,
+          onCreateNameChange: vi.fn(),
+          onRefresh: vi.fn(),
+          onCreate: vi.fn(),
+          onSwitch: vi.fn(),
+          onDelete: vi.fn(),
+          onRestart: vi.fn(),
+        },
+      }),
+      container,
+    );
+
+    const card = container.querySelector('[data-testid="workspace-management-card"]');
+    expect(card).not.toBeNull();
+    expect(container.textContent).toContain("Workspaces");
+    expect(container.textContent).toContain("Default Workspace");
+    expect(container.textContent).toContain("Restart App");
   });
 });

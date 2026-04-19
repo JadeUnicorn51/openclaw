@@ -56,6 +56,11 @@ function createOverviewProps(overrides: Partial<OverviewProps> = {}): OverviewPr
     onRefresh: () => undefined,
     onNavigate: () => undefined,
     onRefreshLogs: () => undefined,
+    workspaceSummary: null,
+    workspaceLoading: false,
+    workspaceError: null,
+    onOpenWorkspaceSettings: () => undefined,
+    onRestartDesktop: () => undefined,
     ...overrides,
   };
 }
@@ -128,5 +133,43 @@ describe("overview view rendering", () => {
     );
     expect(container.textContent).toContain("C:/PurchaseAI/workspace");
     expect(container.textContent).toContain("Configure Models");
+  });
+
+  it("renders active workspace summary when provided", async () => {
+    const container = document.createElement("div");
+    setDesktopSetupState({
+      isDesktop: true,
+      platform: "win32",
+      gatewayToken: "desktop-token",
+      configPath: "C:/PurchaseAI/openclaw.json",
+      stateDir: "C:/PurchaseAI",
+      workspaceDir: "C:/PurchaseAI/workspace",
+      needsSetup: true,
+    });
+
+    render(
+      renderOverview(
+        createOverviewProps({
+          workspaceSummary: {
+            activeWorkspaceId: "project-a",
+            workspaces: [
+              {
+                id: "project-a",
+                name: "Project A",
+                path: "C:/PurchaseAI/workspaces/project-a",
+                createdAtMs: Date.now(),
+                updatedAtMs: Date.now(),
+              },
+            ],
+          },
+        }),
+      ),
+      container,
+    );
+    await Promise.resolve();
+
+    expect(container.textContent).toContain("Workspace Summary");
+    expect(container.textContent).toContain("Project A");
+    expect(container.textContent).toContain("Open Workspace Settings");
   });
 });

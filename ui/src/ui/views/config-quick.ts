@@ -95,6 +95,27 @@ export type QuickSettingsProps = {
       onAction?: () => void;
     }>;
   } | null;
+  workspaceManagement?: {
+    loading: boolean;
+    error: string | null;
+    notice: string | null;
+    activeWorkspaceId: string | null;
+    workspaces: Array<{
+      id: string;
+      name: string;
+      path: string;
+      createdAtMs: number;
+      updatedAtMs: number;
+    }>;
+    createName: string;
+    busyWorkspaceId: string | null;
+    onCreateNameChange?: (next: string) => void;
+    onRefresh?: () => void;
+    onCreate?: () => void;
+    onSwitch?: (workspaceId: string) => void;
+    onDelete?: (workspaceId: string) => void;
+    onRestart?: () => void;
+  } | null;
 
   // Connection
   connected: boolean;
@@ -482,6 +503,88 @@ function renderDesktopSetupCard(
   `;
 }
 
+function renderWorkspaceCard(
+  workspace: NonNullable<QuickSettingsProps["workspaceManagement"]>,
+): TemplateResult {
+  return html`
+    <section class="qs-card qs-card--span-all" data-testid="workspace-management-card">
+      ${renderCardHeader(icons.folder, "Workspaces")}
+      <div class="qs-card__body">
+        <div class="muted" style="margin-bottom: 12px;">
+          Create isolated local workspaces for different projects, teams, or tenders.
+        </div>
+        ${workspace.notice
+          ? html`<div class="callout info" style="margin-bottom: 12px;">${workspace.notice}</div>`
+          : nothing}
+        ${workspace.error
+          ? html`<div class="callout danger" style="margin-bottom: 12px;">${workspace.error}</div>`
+          : nothing}
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <input
+            class="input"
+            style="min-width: 240px;"
+            placeholder="New workspace name"
+            .value=${workspace.createName}
+            @input=${(event: Event) =>
+              workspace.onCreateNameChange?.((event.target as HTMLInputElement).value)}
+          />
+          <button class="btn btn--sm" ?disabled=${workspace.loading} @click=${workspace.onCreate}>
+            Create
+          </button>
+          <button class="btn btn--sm" ?disabled=${workspace.loading} @click=${workspace.onRefresh}>
+            Refresh
+          </button>
+          <button class="btn btn--sm" @click=${workspace.onRestart}>Restart App</button>
+        </div>
+        ${workspace.loading && workspace.workspaces.length === 0
+          ? html`<div class="muted">Loading workspaces...</div>`
+          : nothing}
+        <div style="display: grid; gap: 8px;">
+          ${workspace.workspaces.map(
+            (entry) => html`
+              <div
+                style="border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px;"
+              >
+                <div
+                  style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;"
+                >
+                  <div>
+                    <div style="font-weight: 600;">
+                      ${entry.name}
+                      ${workspace.activeWorkspaceId === entry.id
+                        ? html`<span class="pill pill--sm" style="margin-left: 8px;">Active</span>`
+                        : nothing}
+                    </div>
+                    <div class="muted" style="margin-top: 2px;"><code>${entry.path}</code></div>
+                  </div>
+                  <div style="display: flex; gap: 6px;">
+                    <button
+                      class="btn btn--sm"
+                      ?disabled=${workspace.activeWorkspaceId === entry.id ||
+                      workspace.busyWorkspaceId === entry.id}
+                      @click=${() => workspace.onSwitch?.(entry.id)}
+                    >
+                      Switch
+                    </button>
+                    <button
+                      class="btn btn--sm"
+                      ?disabled=${workspace.activeWorkspaceId === entry.id ||
+                      workspace.busyWorkspaceId === entry.id}
+                      @click=${() => workspace.onDelete?.(entry.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `,
+          )}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 // ── Main render ──
 
 export function renderQuickSettings(props: QuickSettingsProps) {
@@ -496,6 +599,7 @@ export function renderQuickSettings(props: QuickSettingsProps) {
 
       <div class="qs-grid">
         ${props.desktopSetup ? renderDesktopSetupCard(props.desktopSetup) : nothing}
+        ${props.workspaceManagement ? renderWorkspaceCard(props.workspaceManagement) : nothing}
         ${renderModelCard(props)} ${renderChannelsCard(props)} ${renderApiKeysCard(props)}
         ${renderAutomationsCard(props)} ${renderSecurityCard(props)} ${renderAppearanceCard(props)}
         ${renderPresetsCard(props)}
