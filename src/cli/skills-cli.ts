@@ -6,6 +6,12 @@ import {
   searchSkillsFromClawHub,
   updateSkillsFromClawHub,
 } from "../agents/skills-clawhub.js";
+import {
+  clearSkillsLicenseState,
+  readSkillsLicenseState,
+  resolveSkillsLicensePath,
+  writeSkillsLicenseState,
+} from "../agents/skills/license.js";
 import { loadConfig } from "../config/config.js";
 import { defaultRuntime } from "../runtime.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
@@ -44,6 +50,13 @@ async function runSkillsAction(render: (report: SkillStatusReport) => string): P
 function resolveActiveWorkspaceDir(): string {
   const config = loadConfig();
   return resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config));
+}
+
+function parsePacksArg(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 /**
@@ -194,6 +207,94 @@ export function registerSkillsCli(program: Command) {
     .option("--json", "Output as JSON", false)
     .action(async (opts) => {
       await runSkillsAction((report) => formatSkillsCheck(report, opts));
+    });
+
+  const license = skills.command("license").description("Manage paid skill-pack license state");
+
+  license
+    .command("status")
+    .description("Show current skill-pack license state")
+    .option("--json", "Output as JSON", false)
+    .action(async (opts: { json?: boolean }) => {
+      try {
+        const state = await readSkillsLicenseState();
+        const payload = {
+          path: resolveSkillsLicensePath(),
+          licensed: Boolean(state),
+          packs: state?.packs ?? [],
+          key: state?.key ?? null,
+          activatedAt: state?.activatedAt ?? null,
+        };
+        if (opts.json) {
+          defaultRuntime.writeJson(payload);
+          return;
+        }
+        if (!state) {
+          defaultRuntime.log("No skills license found.");
+          defaultRuntime.log(`Path: ${payload.path}`);
+          return;
+        }
+        defaultRuntime.log(`Path: ${payload.path}`);
+        defaultRuntime.log(`Packs: ${state.packs.join(", ")}`);
+        if (state.key) {
+          defaultRuntime.log(`Key: ${state.key}`);
+        }
+        if (state.activatedAt) {
+          defaultRuntime.log(`Activated At: ${state.activatedAt}`);
+        }
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  license
+    .command("activate")
+    .description("Activate paid skill packs locally")
+    .requiredOption("--packs <csv>", "Comma-separated pack ids, e.g. bidding-pro,cost-pro")
+    .option("--key <value>", "Optional activation key to store for traceability")
+    .option("--json", "Output as JSON", false)
+    .action(async (opts: { packs: string; key?: string; json?: boolean }) => {
+      try {
+        const packs = parsePacksArg(opts.packs);
+        const state = await writeSkillsLicenseState({ key: opts.key, packs });
+        if (opts.json) {
+          defaultRuntime.writeJson({
+            ok: true,
+            path: resolveSkillsLicensePath(),
+            state,
+          });
+          return;
+        }
+        defaultRuntime.log("Skills license activated.");
+        defaultRuntime.log(`Path: ${resolveSkillsLicensePath()}`);
+        defaultRuntime.log(`Packs: ${state.packs.join(", ")}`);
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  license
+    .command("clear")
+    .description("Remove local skill-pack license state")
+    .option("--json", "Output as JSON", false)
+    .action(async (opts: { json?: boolean }) => {
+      try {
+        await clearSkillsLicenseState();
+        if (opts.json) {
+          defaultRuntime.writeJson({
+            ok: true,
+            path: resolveSkillsLicensePath(),
+          });
+          return;
+        }
+        defaultRuntime.log("Skills license cleared.");
+        defaultRuntime.log(`Path: ${resolveSkillsLicensePath()}`);
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
     });
 
   // Default action (no subcommand) - show list
