@@ -64,4 +64,11 @@ describe("resolveOpenClawMetadata install validation", () => {
     });
     expect(install).toBeUndefined();
   });
+
+  it("parses pack metadata", () => {
+    const metadata = resolveOpenClawMetadata({
+      metadata: '{"openclaw":{"pack":"bidding-pro"}}',
+    });
+    expect(metadata?.pack).toBe("bidding-pro");
+  });
 });

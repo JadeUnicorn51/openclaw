@@ -19,6 +19,7 @@ export type SkillInstallSpec = {
 export type OpenClawSkillMetadata = {
   always?: boolean;
   skillKey?: string;
+  pack?: string;
   primaryEnv?: string;
   emoji?: string;
   homepage?: string;

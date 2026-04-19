@@ -9,6 +9,7 @@ import {
 } from "../../shared/config-eval.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { resolveSkillKey } from "./frontmatter.js";
+import { isSkillPackLicensed } from "./license.js";
 import { resolveSkillSource } from "./source.js";
 import type { SkillEligibilityContext, SkillEntry } from "./types.js";
 
@@ -81,6 +82,9 @@ export function shouldIncludeSkill(params: {
   const allowBundled = normalizeAllowlist(config?.skills?.allowBundled);
 
   if (skillConfig?.enabled === false) {
+    return false;
+  }
+  if (!isSkillPackLicensed(entry.metadata?.pack)) {
     return false;
   }
   if (!isBundledSkillAllowed(entry, allowBundled)) {

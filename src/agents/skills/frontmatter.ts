@@ -199,6 +199,7 @@ export function resolveOpenClawMetadata(
     emoji: readStringValue(metadataObj.emoji),
     homepage: readStringValue(metadataObj.homepage),
     skillKey: readStringValue(metadataObj.skillKey),
+    pack: readStringValue(metadataObj.pack),
     primaryEnv: readStringValue(metadataObj.primaryEnv),
     os: osRaw.length > 0 ? osRaw : undefined,
     requires: requires,

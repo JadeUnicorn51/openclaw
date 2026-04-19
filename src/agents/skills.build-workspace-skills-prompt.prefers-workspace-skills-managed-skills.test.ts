@@ -151,4 +151,50 @@ describe("buildWorkspaceSkillsPrompt", () => {
     );
     expect(prompt).not.toContain("alias-skill");
   });
+
+  it("filters pack-locked skills when licensed packs are configured", async () => {
+    const workspaceDir = await fixtureSuite.createCaseDir("workspace");
+    const skillsDir = path.join(workspaceDir, "skills");
+
+    await writeSkill({
+      dir: path.join(skillsDir, "free-skill"),
+      name: "free-skill",
+      description: "Free skill",
+    });
+    await writeSkill({
+      dir: path.join(skillsDir, "pro-skill"),
+      name: "pro-skill",
+      description: "Paid skill",
+      metadata: '{"openclaw":{"pack":"bidding-pro"}}',
+    });
+
+    const promptWithoutLicenseFilter = withEnv(
+      { HOME: workspaceDir, PATH: "", OPENCLAW_LICENSED_SKILL_PACKS: undefined },
+      () =>
+        buildWorkspaceSkillsPrompt(workspaceDir, {
+          managedSkillsDir: path.join(workspaceDir, ".managed"),
+        }),
+    );
+    expect(promptWithoutLicenseFilter).toContain("free-skill");
+    expect(promptWithoutLicenseFilter).toContain("pro-skill");
+
+    const promptWithLicenseFilter = withEnv(
+      { HOME: workspaceDir, PATH: "", OPENCLAW_LICENSED_SKILL_PACKS: "free-pack" },
+      () =>
+        buildWorkspaceSkillsPrompt(workspaceDir, {
+          managedSkillsDir: path.join(workspaceDir, ".managed"),
+        }),
+    );
+    expect(promptWithLicenseFilter).toContain("free-skill");
+    expect(promptWithLicenseFilter).not.toContain("pro-skill");
+
+    const promptWithUnlockedPack = withEnv(
+      { HOME: workspaceDir, PATH: "", OPENCLAW_LICENSED_SKILL_PACKS: "bidding-pro,free-pack" },
+      () =>
+        buildWorkspaceSkillsPrompt(workspaceDir, {
+          managedSkillsDir: path.join(workspaceDir, ".managed"),
+        }),
+    );
+    expect(promptWithUnlockedPack).toContain("pro-skill");
+  });
 });
